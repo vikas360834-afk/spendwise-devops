@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spendwise-config
+  namespace: spendwise
+  labels:
+    app.kubernetes.io/name: spendwise
+    app.kubernetes.io/part-of: spendwise-ai
+data:
+  PORT: "4000"
+  NODE_ENV: "production"
+  DATA_DIR: "/app/backend/data"
+  JWT_EXPIRES_IN: "7d"
+  AI_API_URL: "https://api.openai.com/v1/chat/completions"
+  AI_MODEL: "gpt-4o-mini"
+  APP_ENV: "production"

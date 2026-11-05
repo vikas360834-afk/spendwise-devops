@@ -259,6 +259,69 @@ Access the application at **http://localhost:4000**.
 
 ---
 
+## ☸️ Kubernetes & Ansible Deployment (Component 2)
+
+The repository ships with declarative Kubernetes manifests (`k8s/`) and an Ansible
+playbook (`ansible/`) that renders those manifests from variables and applies them to
+a local cluster.
+
+```
+k8s/
+  namespace.yaml      spendwise namespace
+  configmap.yaml      non-secret runtime configuration (PORT, NODE_ENV, DATA_DIR, AI_*)
+  secret.yaml         JWT_SECRET and AI_API_KEY
+  pvc.yaml            1Gi ReadWriteOnce volume for the JSON ledger
+  deployment.yaml     2 replicas, rolling update, startup/readiness/liveness probes
+  service.yaml        ClusterIP service on port 80 -> containerPort 4000
+  kustomization.yaml  applies all of the above in order
+
+ansible/
+  site.yml            play: "Deploy SpendWise AI to Kubernetes"
+  inventory.ini       local connection (kind cluster reached through kubectl)
+  group_vars/all.yml  image tag, replica count, ports, storage class, secrets
+  roles/spendwise/    defaults, handlers, meta, tasks, templates
+```
+
+### Deploy with Ansible
+
+```bash
+cd ansible
+ansible-playbook -i inventory.ini site.yml \
+  -e app_replicas=3 \
+  -e app_image=spendwise-ai:1.0.0
+```
+
+The role renders every manifest with Jinja2 into `ansible/.rendered/`, applies the
+namespace first, then the ConfigMap, Secret, PVC, Deployment and Service, flushes the
+`Restart SpendWise deployment` handler when the ConfigMap changed, waits for
+`kubectl rollout status`, and prints the resulting objects. Rendered manifests are
+git-ignored because they are build output.
+
+### Deploy without Ansible
+
+```bash
+kubectl apply -k k8s/
+kubectl -n spendwise rollout status deployment/spendwise
+kubectl -n spendwise get deploy,svc,pods -o wide
+```
+
+### Scale and inspect
+
+```bash
+kubectl -n spendwise scale deployment/spendwise --replicas=4
+kubectl -n spendwise get pods -l app=spendwise,tier=web -o wide
+kubectl -n spendwise port-forward svc/spendwise 8081:80
+curl http://localhost:8081/health
+```
+
+The Deployment and Service share the `app=spendwise, tier=web` label pair, so scaling
+the Deployment immediately adds endpoints to the Service. `scripts/` contains the
+helper scripts used to prepare the Ubuntu host, start Docker, build
+`spendwise-ai:1.0.0`, create the kind cluster, install the `local-path` StorageClass
+and repair the control plane.
+
+---
+
 ## 🔄 CI/CD Pipeline (GitHub Actions)
 
 Located at `.github/workflows/ci.yml`:

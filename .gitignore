@@ -6,3 +6,6 @@ backend/__tests__/tmp-test-data
 backend/tests/tmp-*
 coverage
 junit.xml
+
+# Ansible rendered manifests (generated at run time)
+ansible/.rendered/

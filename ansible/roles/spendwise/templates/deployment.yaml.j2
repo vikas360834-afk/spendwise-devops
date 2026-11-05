@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ app_name }}
+  namespace: {{ namespace }}
+  labels:
+    app.kubernetes.io/name: {{ app_name }}
+    app.kubernetes.io/component: web
+    app.kubernetes.io/part-of: spendwise-ai
+    app.kubernetes.io/version: "{{ app_version }}"
+    app.kubernetes.io/managed-by: ansible
+spec:
+  replicas: {{ app_replicas }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: {{ app_name }}
+      tier: web
+  template:
+    metadata:
+      labels:
+        app: {{ app_name }}
+        tier: web
+        app.kubernetes.io/name: {{ app_name }}
+        app.kubernetes.io/component: web
+        app.kubernetes.io/part-of: spendwise-ai
+    spec:
+      securityContext:
+        runAsUser: 100
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: {{ app_name }}
+          image: {{ app_image }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: {{ app_port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: spendwise-config
+            - secretRef:
+                name: spendwise-secret
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: data
+              mountPath: {{ data_dir }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: spendwise-data
