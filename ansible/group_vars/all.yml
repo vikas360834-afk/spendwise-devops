@@ -1,0 +1,31 @@
+---
+# Variables shared by every host in the play.
+# Override any of these at run time with: ansible-playbook site.yml -e key=value
+namespace: spendwise
+app_name: spendwise
+app_image: spendwise-ai:1.0.0
+app_version: "1.0.0"
+app_replicas: 2
+app_env: production
+app_port: 4000
+service_port: 80
+
+# Application configuration rendered into the ConfigMap.
+jwt_expires_in: 7d
+ai_api_url: https://api.openai.com/v1/chat/completions
+ai_model: gpt-4o-mini
+data_dir: /app/backend/data
+
+# Secrets are read from the environment so that no credential is committed.
+# In a real deployment these would come from Ansible Vault, SOPS or a secret manager.
+jwt_secret: "{{ lookup('env', 'SPENDWISE_JWT_SECRET') | default('spendwise-demo-jwt-secret-change-me', true) }}"
+ai_api_key: "{{ lookup('env', 'SPENDWISE_AI_API_KEY') | default('', true) }}"
+
+# Storage and rollout tuning.
+storage_class: local-path
+storage_size: 1Gi
+rollout_timeout: 180
+
+# Directory where Jinja2-rendered manifests are written before kubectl apply.
+rendered_dir: "{{ playbook_dir }}/.rendered"
+kubectl_bin: kubectl

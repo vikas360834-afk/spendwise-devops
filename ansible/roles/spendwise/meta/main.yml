@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  role_name: spendwise
+  author: SpendWise DevOps
+  description: Deploy the SpendWise AI application to Kubernetes
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - kubernetes
+    - spendwise
+dependencies: []

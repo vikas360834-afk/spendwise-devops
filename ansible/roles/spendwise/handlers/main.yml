@@ -1,0 +1,9 @@
+---
+- name: Restart SpendWise deployment
+  # kubectl rollout restart creates a new ReplicaSet and lets the
+  # Deployment controller perform a zero-downtime rolling update.
+  ansible.builtin.shell: |
+    set -e
+    {{ kubectl_bin }} -n {{ namespace }} rollout restart deployment/{{ app_name }}
+    {{ kubectl_bin }} -n {{ namespace }} rollout status deployment/{{ app_name }} --timeout={{ rollout_timeout }}s
+  changed_when: true

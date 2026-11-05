@@ -24,6 +24,16 @@ app.use(morgan('tiny'));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
 
+app.get(['/download-zip', '/api/download-zip'], (_req, res) => {
+  const zipFile = path.join(__dirname, '..', '..', 'spendwise-v2-upgrade.zip');
+  if (fs.existsSync(zipFile)) {
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="spendwise-v2-upgrade.zip"');
+    return res.download(zipFile, 'spendwise-v2-upgrade.zip');
+  }
+  res.status(404).json({ error: 'Zip file not found' });
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/budgets', budgetRoutes);
@@ -87,5 +97,3 @@ if (require.main === module) {
 }
 
 module.exports = app;
-// CI trigger test
-// CI trigger test

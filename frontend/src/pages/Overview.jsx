@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -33,6 +33,10 @@ import {
   TransactionList,
 } from '../components/NeonComponents.jsx';
 import { SkeletonCards, EmptyState, Progress, StatePill } from '../components/ui.jsx';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Tooltip, Legend, Filler } from 'chart.js';
+import { Line, Doughnut } from 'react-chartjs-2';
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Tooltip, Legend, Filler);
 
 export function Overview({ onNavigate, onOpenAddExpense }) {
   const [stats, setStats] = useState(null);
@@ -245,7 +249,7 @@ export function Overview({ onNavigate, onOpenAddExpense }) {
             </span>
           </div>
           <div style={{ height: 260, position: 'relative' }}>
-            <InteractiveCashFlowChart labels={labels} income={incomeSeries} expenses={expenseSeries} />
+            <CashFlowLineChart labels={labels} income={incomeSeries} expenses={expenseSeries} />
           </div>
         </GlassCard>
 
@@ -259,7 +263,7 @@ export function Overview({ onNavigate, onOpenAddExpense }) {
           onAction={() => onNavigate && onNavigate('categories')}
         >
           <div style={{ height: 260, position: 'relative' }}>
-            <DashboardDonut labels={catLabels} data={catData} total={stats.expenses} />
+            <CategoryDonutChart labels={catLabels} data={catData} total={stats.expenses} />
           </div>
         </GlassCard>
       </div>
@@ -408,158 +412,138 @@ export function Overview({ onNavigate, onOpenAddExpense }) {
   );
 }
 
-// ==========================================================================
-// High-Definition Canvas Visualizations: Dual Curved Area & Donut
-// ==========================================================================
-function InteractiveCashFlowChart({ labels, income, expenses }) {
-  const canvasRef = useRef(null);
+const darkTooltip = {
+  backgroundColor: 'rgba(10, 6, 20, 0.95)',
+  borderColor: 'rgba(168, 85, 247, 0.3)',
+  borderWidth: 1,
+  titleColor: '#fff',
+  bodyColor: '#d4d0e0',
+  padding: 12,
+  cornerRadius: 10,
+  titleFont: { family: 'Plus Jakarta Sans, sans-serif', weight: '600' },
+  bodyFont: { family: 'Plus Jakarta Sans, sans-serif' },
+};
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const width = canvas.offsetWidth;
-    const height = 260;
-    canvas.width = width * 2;
-    canvas.height = height * 2;
-    ctx.scale(2, 2);
+function CashFlowLineChart({ labels, income, expenses }) {
+  const data = {
+    labels,
+    datasets: [
+      {
+        label: 'Income',
+        data: income,
+        borderColor: '#06b6d4',
+        backgroundColor: 'rgba(6, 182, 212, 0.12)',
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#07020f',
+        pointBorderColor: '#06b6d4',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 2.5,
+      },
+      {
+        label: 'Expenses',
+        data: expenses,
+        borderColor: '#d946ef',
+        backgroundColor: 'rgba(217, 70, 239, 0.12)',
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#07020f',
+        pointBorderColor: '#d946ef',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 2.5,
+      },
+    ],
+  };
 
-    ctx.clearRect(0, 0, width, height);
-    if (!labels.length) return;
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: darkTooltip,
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(168, 85, 247, 0.08)' },
+        ticks: {
+          color: '#a393be',
+          font: { family: 'Plus Jakarta Sans, sans-serif', size: 11.5, weight: '500' },
+        },
+        border: { display: false },
+      },
+      y: {
+        grid: { color: 'rgba(168, 85, 247, 0.08)' },
+        ticks: {
+          color: '#a393be',
+          font: { family: 'Plus Jakarta Sans, sans-serif', size: 11, weight: '500' },
+        },
+        border: { display: false },
+      },
+    },
+  };
 
-    const maxVal = Math.max(...income, ...expenses, 1000);
-    const paddingLeft = 45;
-    const paddingRight = 20;
-    const paddingTop = 25;
-    const paddingBottom = 35;
-    const chartW = width - paddingLeft - paddingRight;
-    const chartH = height - paddingTop - paddingBottom;
-    const stepX = chartW / (labels.length - 1 || 1);
-
-    // Grid lines
-    ctx.strokeStyle = 'rgba(168, 85, 247, 0.08)';
-    ctx.lineWidth = 1;
-    for (let i = 0; i <= 4; i++) {
-      const y = paddingTop + (chartH / 4) * i;
-      ctx.beginPath();
-      ctx.moveTo(paddingLeft, y);
-      ctx.lineTo(width - paddingRight, y);
-      ctx.stroke();
-    }
-
-    // Draw Smooth Area & Line for Income (Neon Cyan)
-    drawCurvedLine(ctx, income, maxVal, paddingLeft, paddingTop, chartH, stepX, '#06b6d4', 'rgba(6, 182, 212, 0.12)');
-
-    // Draw Smooth Area & Line for Expenses (Neon Magenta)
-    drawCurvedLine(ctx, expenses, maxVal, paddingLeft, paddingTop, chartH, stepX, '#d946ef', 'rgba(217, 70, 239, 0.12)');
-
-    // X Axis Labels
-    ctx.fillStyle = '#a393be';
-    ctx.font = '500 11.5px Plus Jakarta Sans, sans-serif';
-    ctx.textAlign = 'center';
-    labels.forEach((l, i) => {
-      const x = paddingLeft + i * stepX;
-      ctx.fillText(l, x, height - 10);
-    });
-  }, [labels, income, expenses]);
-
-  return <canvas ref={canvasRef} style={{ width: '100%', height: 260 }} />;
+  return <Line data={data} options={options} />;
 }
 
-function drawCurvedLine(ctx, points, maxVal, padX, padY, h, stepX, strokeColor, fillColor) {
-  if (!points.length) return;
+const donutCenterTextPlugin = {
+  id: 'donutCenterText',
+  afterDraw(chart) {
+    const { ctx, width, height } = chart;
+    const meta = chart.getDatasetMeta(0);
+    if (!meta || !meta.data.length) return;
 
-  const pts = points.map((v, i) => ({
-    x: padX + i * stepX,
-    y: padY + h - (v / maxVal) * h,
-  }));
+    const totalValue = chart.config.options?.plugins?.donutCenterText?.total;
+    const formatter = chart.config.options?.plugins?.donutCenterText?.formatter;
+    if (totalValue == null) return;
 
-  // Area fill
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, padY + h);
-  ctx.lineTo(pts[0].x, pts[0].y);
-  for (let i = 0; i < pts.length - 1; i++) {
-    const mx = (pts[i].x + pts[i + 1].x) / 2;
-    ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, (pts[i].y + pts[i + 1].y) / 2);
-  }
-  ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
-  ctx.lineTo(pts[pts.length - 1].x, padY + h);
-  ctx.closePath();
-  ctx.fillStyle = fillColor;
-  ctx.fill();
-
-  // Line stroke
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 0; i < pts.length - 1; i++) {
-    const mx = (pts[i].x + pts[i + 1].x) / 2;
-    ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, (pts[i].y + pts[i + 1].y) / 2);
-  }
-  ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
-  ctx.strokeStyle = strokeColor;
-  ctx.lineWidth = 2.5;
-  ctx.stroke();
-
-  // Glowing points
-  pts.forEach((p) => {
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
-    ctx.fillStyle = '#07020f';
-    ctx.fill();
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  });
-}
-
-function DashboardDonut({ labels, data, total }) {
-  const canvasRef = useRef(null);
-  const colors = ['#d946ef', '#a855f7', '#06b6d4', '#fbbf24', '#ec4899', '#38bdf8', '#10b981', '#6366f1'];
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const width = canvas.offsetWidth;
-    const height = 260;
-    canvas.width = width * 2;
-    canvas.height = height * 2;
-    ctx.scale(2, 2);
-
-    ctx.clearRect(0, 0, width, height);
-    if (!data.length || !total) return;
-
-    const cx = width / 2;
-    const cy = height / 2;
-    const R = 86;
-    const r = 58;
-
-    let angle = -Math.PI / 2;
-    data.forEach((v, i) => {
-      const slice = (v / total) * Math.PI * 2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, R, angle, angle + slice);
-      ctx.arc(cx, cy, r, angle + slice, angle, true);
-      ctx.closePath();
-      ctx.fillStyle = colors[i % colors.length];
-      ctx.shadowColor = colors[i % colors.length];
-      ctx.shadowBlur = 12;
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      angle += slice;
-    });
-
-    // Center text
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 17px Space Grotesk, sans-serif';
+    ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(fmtMoney(total), cx, cy - 6);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 17px Space Grotesk, sans-serif';
+    ctx.fillText(formatter ? formatter(totalValue) : totalValue, width / 2, height / 2 - 6);
 
     ctx.fillStyle = '#a393be';
     ctx.font = '500 11px Plus Jakarta Sans, sans-serif';
-    ctx.fillText('Total Outflow', cx, cy + 14);
-  }, [labels, data, total]);
+    ctx.fillText('Total Outflow', width / 2, height / 2 + 14);
 
-  return <canvas ref={canvasRef} style={{ width: '100%', height: 260 }} />;
+    ctx.restore();
+  },
+};
+
+ChartJS.register(donutCenterTextPlugin);
+
+function CategoryDonutChart({ labels, data, total }) {
+  const chartData = {
+    labels,
+    datasets: [
+      {
+        data,
+        backgroundColor: ['#d946ef', '#a855f7', '#06b6d4', '#fbbf24', '#ec4899', '#38bdf8', '#10b981', '#6366f1'],
+        borderWidth: 0,
+        hoverOffset: 6,
+      },
+    ],
+  };
+
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    cutout: '68%',
+    plugins: {
+      legend: { display: false },
+      tooltip: darkTooltip,
+      donutCenterText: {
+        total,
+        formatter: fmtMoney,
+      },
+    },
+  };
+
+  return <Doughnut data={chartData} options={options} />;
 }

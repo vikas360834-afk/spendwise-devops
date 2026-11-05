@@ -1,14 +1,146 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Download, Printer, Calendar, BarChart3, TrendingUp, TrendingDown, DollarSign, PieChart, Activity, Sparkles } from 'lucide-react';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Tooltip, Legend, Filler } from 'chart.js';
+import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import { api, download } from '../api.js';
 import { fmtMoney, monthLabel } from '../lib/format.js';
 import { PageHead, EmptyState, SkeletonCards } from '../components/ui.jsx';
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Tooltip, Legend, Filler);
+
+const DATE_RANGES = ['This Month', 'Last 3 Months', 'Last 6 Months', 'All Time'];
+
+const barChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      backgroundColor: 'rgba(10, 6, 20, 0.95)',
+      borderColor: 'rgba(168, 85, 247, 0.3)',
+      borderWidth: 1,
+      titleColor: '#fff',
+      bodyColor: '#d4d0e0',
+      padding: 12,
+      cornerRadius: 10,
+      titleFont: { family: 'Plus Jakarta Sans, sans-serif', weight: 600 },
+      bodyFont: { family: 'Plus Jakarta Sans, sans-serif' },
+    },
+  },
+  scales: {
+    x: {
+      grid: { color: 'rgba(168, 85, 247, 0.08)' },
+      ticks: { color: '#a393be', font: { family: 'Plus Jakarta Sans, sans-serif', size: 11, weight: '500' } },
+      border: { display: false },
+    },
+    y: {
+      grid: { color: 'rgba(168, 85, 247, 0.08)' },
+      ticks: { color: '#a393be', font: { family: 'Plus Jakarta Sans, sans-serif', size: 11 } },
+      border: { display: false },
+    },
+  },
+};
+
+const lineChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      backgroundColor: 'rgba(10, 6, 20, 0.95)',
+      borderColor: 'rgba(168, 85, 247, 0.3)',
+      borderWidth: 1,
+      titleColor: '#fff',
+      bodyColor: '#d4d0e0',
+      padding: 12,
+      cornerRadius: 10,
+      titleFont: { family: 'Plus Jakarta Sans, sans-serif', weight: 600 },
+      bodyFont: { family: 'Plus Jakarta Sans, sans-serif' },
+    },
+  },
+  scales: {
+    x: {
+      grid: { color: 'rgba(168, 85, 247, 0.08)' },
+      ticks: { color: '#a393be', font: { family: 'Plus Jakarta Sans, sans-serif', size: 11, weight: '500' } },
+      border: { display: false },
+    },
+    y: {
+      grid: { color: 'rgba(168, 85, 247, 0.08)' },
+      ticks: { color: '#a393be', font: { family: 'Plus Jakarta Sans, sans-serif', size: 11 } },
+      border: { display: false },
+    },
+  },
+  interaction: { intersect: false, mode: 'index' },
+};
+
+const doughnutOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  cutout: '68%',
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      backgroundColor: 'rgba(10, 6, 20, 0.95)',
+      borderColor: 'rgba(168, 85, 247, 0.3)',
+      borderWidth: 1,
+      titleColor: '#fff',
+      bodyColor: '#d4d0e0',
+      padding: 12,
+      cornerRadius: 10,
+      titleFont: { family: 'Plus Jakarta Sans, sans-serif', weight: 600 },
+      bodyFont: { family: 'Plus Jakarta Sans, sans-serif' },
+    },
+  },
+};
+
+const DOUGHNUT_COLORS = ['#d946ef', '#a855f7', '#06b6d4', '#fbbf24', '#ec4899', '#38bdf8', '#10b981'];
+
+function buildBarData(labels, incomeData, expenseData) {
+  return {
+    labels,
+    datasets: [
+      {
+        label: 'Income',
+        data: incomeData,
+        backgroundColor: '#06b6d4',
+        borderRadius: 6,
+        borderSkipped: false,
+      },
+      {
+        label: 'Expense',
+        data: expenseData,
+        backgroundColor: '#d946ef',
+        borderRadius: 6,
+        borderSkipped: false,
+      },
+    ],
+  };
+}
+
+function filterByRange(arr, range, dateKey) {
+  if (range === 'All Time') return arr;
+  const now = new Date();
+  let cutoff;
+  if (range === 'This Month') {
+    cutoff = new Date(now.getFullYear(), now.getMonth(), 1);
+  } else if (range === 'Last 3 Months') {
+    cutoff = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+  } else if (range === 'Last 6 Months') {
+    cutoff = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+  }
+  return arr.filter((item) => {
+    const val = item[dateKey];
+    if (!val) return true;
+    return new Date(val) >= cutoff;
+  });
+}
 
 export function Analytics() {
   const [periods, setPeriods] = useState(null);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [dateRange, setDateRange] = useState('All Time');
 
   useEffect(() => {
     async function load() {
@@ -37,6 +169,69 @@ export function Analytics() {
     }
   };
 
+  const daily = useMemo(() => filterByRange(periods?.daily || [], dateRange, 'date'), [periods, dateRange]);
+  const weekly = useMemo(() => filterByRange(periods?.weekly || [], dateRange, 'week'), [periods, dateRange]);
+  const monthly = useMemo(() => filterByRange(periods?.monthly || [], dateRange, 'month'), [periods, dateRange]);
+  const yearly = periods?.yearly || [];
+
+  const catEntries = Object.entries(stats?.byCategory || {}).sort((a, b) => b[1] - a[1]);
+
+  const dailyAvg = daily.length ? daily.reduce((a, d) => a + d.expenses, 0) / daily.length : 0;
+  const weeklyAvg = weekly.length ? weekly.reduce((a, w) => a + w.expenses, 0) / weekly.length : 0;
+  const monthlyAvg = monthly.length ? monthly.reduce((a, m) => a + m.expenses, 0) / monthly.length : 0;
+
+  const lineChartData = useMemo(() => ({
+    labels: monthly.map((m) => monthLabel(m.month)),
+    datasets: [
+      {
+        label: 'Expenses',
+        data: monthly.map((m) => m.expenses),
+        borderColor: '#d946ef',
+        backgroundColor: (ctx) => {
+          const chart = ctx.chart;
+          const { ctx: canvasCtx, chartArea } = chart;
+          if (!chartArea) return 'rgba(217, 70, 239, 0.15)';
+          const gradient = canvasCtx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+          gradient.addColorStop(0, 'rgba(217, 70, 239, 0.35)');
+          gradient.addColorStop(1, 'rgba(217, 70, 239, 0.02)');
+          return gradient;
+        },
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#d946ef',
+        pointBorderColor: '#d946ef',
+        pointRadius: 3,
+        pointHoverRadius: 6,
+        borderWidth: 2.5,
+      },
+      {
+        label: 'Income',
+        data: monthly.map((m) => m.income),
+        borderColor: '#06b6d4',
+        backgroundColor: 'transparent',
+        fill: false,
+        tension: 0.4,
+        pointBackgroundColor: '#06b6d4',
+        pointBorderColor: '#06b6d4',
+        pointRadius: 3,
+        pointHoverRadius: 6,
+        borderWidth: 2.5,
+      },
+    ],
+  }), [monthly]);
+
+  const doughnutData = useMemo(() => ({
+    labels: catEntries.map(([cat]) => cat),
+    datasets: [
+      {
+        data: catEntries.map(([, amt]) => amt),
+        backgroundColor: catEntries.map((_, i) => DOUGHNUT_COLORS[i % DOUGHNUT_COLORS.length]),
+        borderWidth: 0,
+        hoverOffset: 6,
+      },
+    ],
+  }), [catEntries]);
+
   if (loading) return <SkeletonCards n={4} />;
 
   if (!stats || stats.count === 0) {
@@ -54,18 +249,6 @@ export function Analytics() {
     );
   }
 
-  const daily = periods?.daily || [];
-  const weekly = periods?.weekly || [];
-  const monthly = periods?.monthly || [];
-  const yearly = periods?.yearly || [];
-
-  const catEntries = Object.entries(stats.byCategory || {}).sort((a, b) => b[1] - a[1]);
-  const colors = ['#d946ef', '#a855f7', '#06b6d4', '#fbbf24', '#ec4899', '#38bdf8', '#10b981'];
-
-  const dailyAvg = daily.length ? daily.reduce((a, d) => a + d.expenses, 0) / daily.length : 0;
-  const weeklyAvg = weekly.length ? weekly.reduce((a, w) => a + w.expenses, 0) / weekly.length : 0;
-  const monthlyAvg = monthly.length ? monthly.reduce((a, m) => a + m.expenses, 0) / monthly.length : 0;
-
   return (
     <div>
       <PageHead
@@ -82,6 +265,41 @@ export function Analytics() {
           </div>
         }
       />
+
+      <div style={{
+        display: 'flex',
+        gap: 6,
+        marginBottom: 24,
+        padding: 4,
+        background: 'rgba(168, 85, 247, 0.06)',
+        borderRadius: 12,
+        border: '1px solid rgba(168, 85, 247, 0.12)',
+        width: 'fit-content',
+      }}>
+        {DATE_RANGES.map((range) => (
+          <button
+            key={range}
+            onClick={() => setDateRange(range)}
+            style={{
+              padding: '8px 18px',
+              borderRadius: 8,
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 12.5,
+              fontWeight: 600,
+              fontFamily: 'Plus Jakarta Sans, sans-serif',
+              transition: 'all 0.2s ease',
+              background: dateRange === range
+                ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.35), rgba(217, 70, 239, 0.25))'
+                : 'transparent',
+              color: dateRange === range ? '#fff' : '#a393be',
+              boxShadow: dateRange === range ? '0 0 12px rgba(168, 85, 247, 0.2)' : 'none',
+            }}
+          >
+            {range}
+          </button>
+        ))}
+      </div>
 
       {/* Average Metrics */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 18, marginBottom: 24 }}>
@@ -165,14 +383,13 @@ export function Analytics() {
             </div>
           </div>
           <div style={{ height: 260, position: 'relative' }}>
-            <AnalyticsBarChart
-              labels={daily.map((d) => d.date.slice(5))}
-              seriesA={daily.map((d) => d.income)}
-              seriesB={daily.map((d) => d.expenses)}
-              labelA="Income"
-              labelB="Expense"
-              colorA="#06b6d4"
-              colorB="#d946ef"
+            <Bar
+              data={buildBarData(
+                daily.map((d) => d.date.slice(5)),
+                daily.map((d) => d.income),
+                daily.map((d) => d.expenses)
+              )}
+              options={barChartOptions}
             />
           </div>
         </div>
@@ -194,14 +411,13 @@ export function Analytics() {
             </div>
           </div>
           <div style={{ height: 260, position: 'relative' }}>
-            <AnalyticsBarChart
-              labels={weekly.map((w) => w.week.slice(-5))}
-              seriesA={weekly.map((w) => w.income)}
-              seriesB={weekly.map((w) => w.expenses)}
-              labelA="Income"
-              labelB="Expense"
-              colorA="#06b6d4"
-              colorB="#d946ef"
+            <Bar
+              data={buildBarData(
+                weekly.map((w) => w.week.slice(-5)),
+                weekly.map((w) => w.income),
+                weekly.map((w) => w.expenses)
+              )}
+              options={barChartOptions}
             />
           </div>
         </div>
@@ -220,19 +436,17 @@ export function Analytics() {
             </div>
           </div>
           <div style={{ height: 260, position: 'relative' }}>
-            <AnalyticsBarChart
-              labels={monthly.map((m) => monthLabel(m.month))}
-              seriesA={monthly.map((m) => m.income)}
-              seriesB={monthly.map((m) => m.expenses)}
-              labelA="Income"
-              labelB="Expense"
-              colorA="#06b6d4"
-              colorB="#d946ef"
+            <Bar
+              data={buildBarData(
+                monthly.map((m) => monthLabel(m.month)),
+                monthly.map((m) => m.income),
+                monthly.map((m) => m.expenses)
+              )}
+              options={barChartOptions}
             />
           </div>
         </div>
 
-        {/* Category Breakdown Table */}
         <div className="glass-card-neon" style={{ padding: 22 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
             <div className="icon-tile-gradient icon-tile-magenta">
@@ -244,33 +458,60 @@ export function Analytics() {
             </div>
           </div>
 
-          <div style={{ maxHeight: 250, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {catEntries.map(([category, amt], i) => {
-              const pct = stats.expenses > 0 ? ((amt / stats.expenses) * 100).toFixed(1) : 0;
-              return (
-                <div key={category} className="legend-pill" style={{ padding: '10px 14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        background: colors[i % colors.length],
-                        boxShadow: `0 0 8px ${colors[i % colors.length]}`,
-                      }}
-                    />
-                    <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>{category}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+            <div style={{ width: 180, height: 180, flexShrink: 0 }}>
+              <Doughnut data={doughnutData} options={doughnutOptions} />
+            </div>
+            <div style={{ flex: 1, maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {catEntries.map(([category, amt], i) => {
+                const pct = stats.expenses > 0 ? ((amt / stats.expenses) * 100).toFixed(1) : 0;
+                return (
+                  <div key={category} className="legend-pill" style={{ padding: '8px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: DOUGHNUT_COLORS[i % DOUGHNUT_COLORS.length],
+                          boxShadow: `0 0 8px ${DOUGHNUT_COLORS[i % DOUGHNUT_COLORS.length]}`,
+                        }}
+                      />
+                      <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 12.5 }}>{category}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{pct}%</span>
+                      <span className="font-numeric" style={{ fontWeight: 700, color: '#fff', fontSize: 12.5 }}>
+                        {fmtMoney(amt)}
+                      </span>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{pct}%</span>
-                    <span className="font-numeric" style={{ fontWeight: 700, color: '#fff', fontSize: 13.5 }}>
-                      {fmtMoney(amt)}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
+        </div>
+      </div>
+
+      {/* Spending Trend */}
+      <div className="glass-card-neon" style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div className="icon-tile-gradient icon-tile-magenta">
+              <TrendingDown size={18} />
+            </div>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>Spending Trend</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Monthly expense area vs income overlay</p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 14, fontSize: 11.5 }}>
+            <span style={{ color: '#d946ef', fontWeight: 700 }}>■ Expenses</span>
+            <span style={{ color: '#06b6d4', fontWeight: 700 }}>■ Income</span>
+          </div>
+        </div>
+        <div style={{ height: 280, position: 'relative' }}>
+          <Line data={lineChartData} options={lineChartOptions} />
         </div>
       </div>
 
@@ -307,79 +548,4 @@ export function Analytics() {
       </div>
     </div>
   );
-}
-
-// Canvas Dual Bar Chart with glowing round bars
-function AnalyticsBarChart({ labels, seriesA, seriesB, colorA, colorB }) {
-  const canvasRef = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const width = canvas.offsetWidth;
-    const height = 260;
-    canvas.width = width * 2;
-    canvas.height = height * 2;
-    ctx.scale(2, 2);
-
-    ctx.clearRect(0, 0, width, height);
-    if (!labels.length) return;
-
-    const maxVal = Math.max(...seriesA, ...seriesB, 1000);
-    const padL = 40;
-    const padR = 16;
-    const padT = 20;
-    const padB = 30;
-    const chartW = width - padL - padR;
-    const chartH = height - padT - padB;
-    const groupW = chartW / labels.length;
-    const barW = Math.max(3, Math.min(13, (groupW - 8) / 2));
-
-    // Grid lines
-    ctx.strokeStyle = 'rgba(168, 85, 247, 0.08)';
-    ctx.lineWidth = 1;
-    for (let i = 0; i <= 3; i++) {
-      const y = padT + (chartH / 3) * i;
-      ctx.beginPath();
-      ctx.moveTo(padL, y);
-      ctx.lineTo(width - padR, y);
-      ctx.stroke();
-    }
-
-    // Bars
-    labels.forEach((label, i) => {
-      const groupX = padL + i * groupW + groupW / 2;
-
-      // Series A (Income)
-      const valA = seriesA[i] || 0;
-      const hA = (valA / maxVal) * chartH;
-      ctx.fillStyle = colorA;
-      ctx.shadowColor = colorA;
-      ctx.shadowBlur = 6;
-      ctx.beginPath();
-      ctx.roundRect(groupX - barW - 2, padT + chartH - hA, barW, hA, [4, 4, 0, 0]);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-
-      // Series B (Expense)
-      const valB = seriesB[i] || 0;
-      const hB = (valB / maxVal) * chartH;
-      ctx.fillStyle = colorB;
-      ctx.shadowColor = colorB;
-      ctx.shadowBlur = 6;
-      ctx.beginPath();
-      ctx.roundRect(groupX + 2, padT + chartH - hB, barW, hB, [4, 4, 0, 0]);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-
-      // Label
-      ctx.fillStyle = '#a393be';
-      ctx.font = '500 10.5px Plus Jakarta Sans, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(label, groupX, height - 10);
-    });
-  }, [labels, seriesA, seriesB, colorA, colorB]);
-
-  return <canvas ref={canvasRef} style={{ width: '100%', height: 260 }} />;
 }

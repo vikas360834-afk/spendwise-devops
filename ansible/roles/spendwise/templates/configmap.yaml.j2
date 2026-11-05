@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spendwise-config
+  namespace: {{ namespace }}
+  labels:
+    app.kubernetes.io/name: {{ app_name }}
+    app.kubernetes.io/part-of: spendwise-ai
+    app.kubernetes.io/managed-by: ansible
+data:
+  PORT: "{{ app_port }}"
+  NODE_ENV: "production"
+  DATA_DIR: "{{ data_dir }}"
+  JWT_EXPIRES_IN: "{{ jwt_expires_in }}"
+  AI_API_URL: "{{ ai_api_url }}"
+  AI_MODEL: "{{ ai_model }}"
+  APP_ENV: "{{ app_env }}"

@@ -1,8 +1,12 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { FolderTree, TrendingDown, DollarSign, Target, PieChart, Plus, Search, Layers, ShoppingBag, Utensils, Car, Zap, HeartPulse, Film, Plane, Briefcase, Gift, ShieldAlert } from 'lucide-react';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
+import { Doughnut } from 'react-chartjs-2';
 import { api } from '../api.js';
 import { fmtMoney, todayYM, monthLabel } from '../lib/format.js';
 import { PageHead, EmptyState, SkeletonCards, Progress } from '../components/ui.jsx';
+
+ChartJS.register(ArcElement, Tooltip, Legend);
 
 const CAT_ICONS = {
   Food: Utensils,
@@ -24,7 +28,30 @@ const CAT_COLORS = [
   '#38bdf8', '#10b981', '#f43f5e', '#6366f1', '#14b8a6', '#eab308', '#64748b'
 ];
 
-export function Categories({ onNavigate, setSelectedCategory }) {
+const centerTextPlugin = {
+  id: 'centerText',
+  afterDraw(chart) {
+    const { ctx, width, height } = chart;
+    const total = chart.config.options.plugins.centerText?.total;
+    if (total == null) return;
+
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 17px Space Grotesk, sans-serif';
+    ctx.fillText(fmtMoney(total), width / 2, height / 2 - 6);
+
+    ctx.fillStyle = '#a393be';
+    ctx.font = '500 11px Plus Jakarta Sans, sans-serif';
+    ctx.fillText('Total Outflow', width / 2, height / 2 + 14);
+
+    ctx.restore();
+  },
+};
+
+export function Categories() {
   const [stats, setStats] = useState(null);
   const [budgets, setBudgets] = useState(null);
   const [meta, setMeta] = useState({ categories: [] });
@@ -67,6 +94,44 @@ export function Categories({ onNavigate, setSelectedCategory }) {
   const chartCategories = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
 
   if (loading) return <SkeletonCards n={4} />;
+
+  const donutData = {
+    labels: chartCategories.map((c) => c[0]),
+    datasets: [
+      {
+        data: chartCategories.map((c) => c[1]),
+        backgroundColor: chartCategories.map((_, i) => CAT_COLORS[i % CAT_COLORS.length]),
+        borderWidth: 0,
+        hoverOffset: 6,
+      },
+    ],
+  };
+
+  const donutOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    cutout: '68%',
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: 'rgba(10, 6, 20, 0.95)',
+        borderColor: 'rgba(168, 85, 247, 0.3)',
+        borderWidth: 1,
+        titleColor: '#fff',
+        bodyColor: '#d4d0e0',
+        padding: 12,
+        cornerRadius: 10,
+        titleFont: { family: 'Plus Jakarta Sans, sans-serif', weight: '600' },
+        bodyFont: { family: 'Plus Jakarta Sans, sans-serif' },
+        callbacks: {
+          label(ctx) {
+            return ` ${fmtMoney(ctx.parsed)}`;
+          },
+        },
+      },
+      centerText: { total: totalExpense },
+    },
+  };
 
   return (
     <div>
@@ -163,12 +228,7 @@ export function Categories({ onNavigate, setSelectedCategory }) {
             </div>
           </div>
           <div style={{ height: 280, position: 'relative' }}>
-            <CategoryDonut
-              labels={chartCategories.map((c) => c[0])}
-              values={chartCategories.map((c) => c[1])}
-              colors={CAT_COLORS}
-              total={totalExpense}
-            />
+            <Doughnut data={donutData} options={donutOptions} plugins={[centerTextPlugin]} />
           </div>
         </div>
 
@@ -228,12 +288,7 @@ export function Categories({ onNavigate, setSelectedCategory }) {
           const color = CAT_COLORS[idx % CAT_COLORS.length];
 
           return (
-            <div key={category} className="glass-card-neon" style={{ display: 'flex', flexDirection: 'column', gap: 12, cursor: 'pointer' }}
-            onClick={() => {
-              setSelectedCategory(category);
-              onNavigate('categoryDetail');
-            }}
-          >>
+            <div key={category} className="glass-card-neon" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 10, background: `${color}20`, border: `1px solid ${color}45`, display: 'flex', alignItems: 'center', justifyContent: 'center', color }}>
@@ -266,56 +321,4 @@ export function Categories({ onNavigate, setSelectedCategory }) {
       </div>
     </div>
   );
-}
-
-function CategoryDonut({ labels, values, colors, total }) {
-  const canvasRef = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const width = canvas.offsetWidth;
-    const height = 280;
-    canvas.width = width * 2;
-    canvas.height = height * 2;
-    ctx.scale(2, 2);
-
-    ctx.clearRect(0, 0, width, height);
-    if (!values.length || !total) return;
-
-    const cx = width / 2;
-    const cy = height / 2;
-    const outerR = 95;
-    const innerR = 64;
-
-    let startAngle = -Math.PI / 2;
-
-    values.forEach((v, i) => {
-      const slice = (v / total) * Math.PI * 2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, outerR, startAngle, startAngle + slice);
-      ctx.arc(cx, cy, innerR, startAngle + slice, startAngle, true);
-      ctx.closePath();
-      ctx.fillStyle = colors[i % colors.length];
-      ctx.shadowColor = colors[i % colors.length];
-      ctx.shadowBlur = 10;
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      startAngle += slice;
-    });
-
-    // Center text
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 17px Space Grotesk, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(fmtMoney(total), cx, cy - 6);
-
-    ctx.fillStyle = '#a393be';
-    ctx.font = '500 11px Plus Jakarta Sans, sans-serif';
-    ctx.fillText('Total Outflow', cx, cy + 14);
-  }, [labels, values, colors, total]);
-
-  return <canvas ref={canvasRef} style={{ width: '100%', height: 280 }} />;
 }

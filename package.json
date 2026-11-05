@@ -1,14 +1,16 @@
 {
-  "name": "spendwise",
+  "name": "spendwise-ai",
+  "version": "1.0.0",
   "private": true,
-  "version": "2.0.0",
-  "description": "SpendWise — Premium AI-Powered Expense Tracker (React + Express)",
+  "description": "SpendWise AI - smart expense tracker (Express REST API + React SPA)",
   "scripts": {
-    "install:all": "npm --prefix backend install && npm --prefix frontend install",
-    "dev:backend": "npm --prefix backend run dev",
-    "dev:frontend": "npm --prefix frontend run dev",
-    "test": "npm --prefix backend test",
-    "build": "npm --prefix frontend run build",
-    "start": "npm --prefix backend run start"
+    "install:all": "npm ci --prefix backend && npm ci --prefix frontend",
+    "test": "npm test --prefix backend",
+    "build": "npm run build --prefix frontend",
+    "start": "node backend/src/server.js"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
   }
 }

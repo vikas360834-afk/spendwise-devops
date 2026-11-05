@@ -14,7 +14,6 @@ import { AIAssistant } from './pages/AIAssistant.jsx';
 import { Recurring } from './pages/Recurring.jsx';
 import { Reports } from './pages/Reports.jsx';
 import { Settings as SettingsPage } from './pages/Settings.jsx';
-import { CategoryDetail } from './pages/CategoryDetail.jsx';
 import { DevOps } from './pages/DevOps.jsx';
 import { api } from './api.js';
 import { todayISO } from './lib/format.js';
@@ -28,7 +27,6 @@ const PAGES = {
   transactions: Transactions,
   budgets: Budgets,
   categories: Categories,
-  categoryDetail: CategoryDetail,
   goals: SavingsGoals,
   analytics: Analytics,
   ai: AIAssistant,
@@ -48,8 +46,6 @@ function AppContent() {
   const [aiChatOpen, setAiChatOpen] = useState(false);
   const [globalAddExpenseOpen, setGlobalAddExpenseOpen] = useState(false);
   const [meta, setMeta] = useState({ categories: [], paymentMethods: [] });
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const [selectedMonth, setSelectedMonth] = useState(null);
 
   useEffect(() => {
     if (user) {
@@ -111,10 +107,6 @@ function AppContent() {
             onNavigate={setCurrent}
             onOpenAddExpense={() => setGlobalAddExpenseOpen(true)}
             globalSearch={search}
-            selectedCategory={selectedCategory}
-            setSelectedCategory={setSelectedCategory}
-            selectedMonth={selectedMonth}
-            setSelectedMonth={setSelectedMonth}
           />
         </main>
       </div>

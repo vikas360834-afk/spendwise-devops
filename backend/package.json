@@ -1,12 +1,13 @@
 {
-  "name": "expense-tracker-backend",
+  "name": "spendwise-backend",
   "version": "1.0.0",
-  "description": "Expense Tracker API - Express + JWT + file persistence",
+  "private": true,
+  "description": "SpendWise AI Express REST API",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "jest --coverage"
+    "test": "jest --runInBand --coverage"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -18,9 +19,27 @@
   },
   "devDependencies": {
     "jest": "^29.7.0",
-    "supertest": "^6.3.4"
+    "jest-junit": "^16.0.0",
+    "supertest": "^7.0.0"
   },
   "jest": {
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/server.js"
+    ],
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "clover",
+      "json"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/data/"
+    ]
   }
 }

@@ -1,40 +1,105 @@
+// SpendWise AI - Component 1 CI pipeline
+// Place this file at the ROOT of the spendwise-ai repository.
+
 pipeline {
     agent any
 
+    tools {
+        // Must match the NodeJS tool name configured in
+        // Manage Jenkins -> Tools -> NodeJS installations
+        nodejs 'node20'
+    }
+
+    options {
+        timestamps()
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        CI         = 'true'
+        JWT_SECRET = 'jenkins-ci-test-secret'
+    }
+
     stages {
-        stage('Version') {
+        stage('Checkout') {
             steps {
+                checkout scm
                 script {
-                    def sha = bat(returnStdout: true, script: '@git rev-parse --short HEAD').trim().split("\r?\n")[-1]
-                    env.APP_VERSION = "1.0.${env.BUILD_NUMBER}-${sha}"
+                    env.GIT_SHA = sh(
+                        returnStdout: true,
+                        script: 'git rev-parse --short HEAD'
+                    ).trim()
+                    echo "Building commit ${env.GIT_SHA} (build #${env.BUILD_NUMBER})"
                 }
-                echo "Building version ${env.APP_VERSION}"
             }
         }
 
-        stage('Install Backend') {
+        stage('Install Dependencies') {
             steps {
-                bat 'cd backend && npm ci'
+                dir('backend') {
+                    sh 'npm ci'
+                }
+                dir('frontend') {
+                    sh 'npm ci'
+                }
             }
         }
 
+        // CI ENHANCEMENT: the test stage runs before the build stage.
+        // If any Jest/Supertest test fails, the pipeline stops here and
+        // no artifact is produced.
         stage('Test') {
             steps {
-                bat 'cd backend && npm test'
+                dir('backend') {
+                    sh 'npx jest --ci --runInBand --coverage --reporters=default --reporters=jest-junit'
+                }
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: 'backend/junit.xml'
+                    publishHTML(target: [
+                        allowMissing         : true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll              : true,
+                        reportDir            : 'backend/coverage/lcov-report',
+                        reportFiles          : 'index.html',
+                        reportName           : 'Jest Coverage Report'
+                    ])
+                }
             }
         }
 
-        stage('Build Frontend') {
+        stage('Build') {
             steps {
-                bat 'cd frontend && npm ci && npm run build'
+                dir('frontend') {
+                    sh 'npm run build'
+                }
             }
         }
 
-        stage('Package') {
+        stage('Package & Archive Artifact') {
             steps {
-                bat "tar -a -c -f spendwise-${env.APP_VERSION}.zip backend\\src backend\\package.json frontend\\dist"
-                archiveArtifacts artifacts: "spendwise-${env.APP_VERSION}.zip", fingerprint: true
+                sh "tar -czf spendwise-frontend-${env.BUILD_NUMBER}-${env.GIT_SHA}.tar.gz -C frontend dist"
+                archiveArtifacts artifacts: 'spendwise-frontend-*.tar.gz', fingerprint: true
             }
         }
+    }
+
+    post {
+        success {
+            echo "Pipeline succeeded for ${env.GIT_SHA}. Artifact: spendwise-frontend-${env.BUILD_NUMBER}-${env.GIT_SHA}.tar.gz"
+        }
+        failure {
+            echo "Pipeline failed for ${env.GIT_SHA}. Check the Test stage console output."
+        }
+        always {
+            cleanWs()
+        }
+    }
+
+    triggers {
+        // Poll SCM every 2 minutes (webhook is the faster alternative).
+        pollSCM('H/2 * * * *')
     }
 }
